@@ -1,0 +1,160 @@
+name: Kernel Build Exynos 9830 (LLVM12 SAFE Incremental)
+
+on:
+  workflow_dispatch:
+
+env:
+  LLVM_VER: "12"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      # =========================
+      # CHECKOUT
+      # =========================
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+
+      # =========================
+      # CACHE (LLVM VERSIONED)
+      # =========================
+      - name: Restore ccache (LLVM versioned)
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-llvm${{ env.LLVM_VER }}-${{ github.ref }}
+          restore-keys: |
+            ccache-${{ runner.os }}-llvm${{ env.LLVM_VER }}-
+
+      # ❌ NÃO restauramos out/ aqui propositalmente
+      #    para eliminar QUALQUER lixo LLVM14
+
+      # =========================
+      # DEPENDÊNCIAS
+      # =========================
+      - name: Install dependencies (Clang 12)
+        run: |
+          sudo apt update -y
+          sudo apt install -y \
+            bc bison build-essential ccache curl flex git \
+            libssl-dev libelf-dev libncurses5-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            clang-12 lld-12 llvm-12 llvm-12-tools \
+            zip wget neofetch
+
+      # =========================
+      # FIX LLVM BINÁRIOS
+      # =========================
+      - name: Fix LLVM tools binary names
+        run: |
+          sudo ln -sf /usr/bin/llvm-ar-12       /usr/bin/llvm-ar
+          sudo ln -sf /usr/bin/llvm-nm-12       /usr/bin/llvm-nm
+          sudo ln -sf /usr/bin/llvm-objcopy-12  /usr/bin/llvm-objcopy
+          sudo ln -sf /usr/bin/llvm-objdump-12  /usr/bin/llvm-objdump
+          sudo ln -sf /usr/bin/llvm-strip-12    /usr/bin/llvm-strip
+          sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/ld.lld
+          sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/lld
+
+      # =========================
+      # ENV
+      # =========================
+      - name: Setup environment
+        run: |
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "SUBARCH=arm64" >> $GITHUB_ENV
+          echo "LLVM=1" >> $GITHUB_ENV
+
+          echo "CC=ccache clang-12" >> $GITHUB_ENV
+          echo "LD=ld.lld-12" >> $GITHUB_ENV
+          echo "AR=llvm-ar" >> $GITHUB_ENV
+          echo "NM=llvm-nm" >> $GITHUB_ENV
+          echo "OBJCOPY=llvm-objcopy" >> $GITHUB_ENV
+          echo "OBJDUMP=llvm-objdump" >> $GITHUB_ENV
+          echo "STRIP=llvm-strip" >> $GITHUB_ENV
+
+          echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
+          echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
+
+          ccache -C
+          ccache -M 10G
+          ccache -s
+          clang-12 --version
+
+      # =========================
+      # DEFCONFIG
+      # =========================
+      - name: Defconfig
+        run: |
+          make O=out exynos9830_defconfig r8s.config
+
+      # =========================
+      # BUILD (CLEAN LLVM12)
+      # =========================
+      - name: Build kernel
+        run: |
+          make O=out -j$(nproc)
+          ccache -s
+
+      # =========================
+      # ANYKERNEL
+      # =========================
+      - name: Build AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
+          rm -rf anykernel/.git anykernel/README.md
+
+          cp out/arch/arm64/boot/Image.gz anykernel/ || \
+          cp out/arch/arm64/boot/Image anykernel/
+
+          cd anykernel
+          zip -r9 ../AnyKernel3-Exynos9830.zip *
+
+      # =========================
+      # BOOT / DTB / DTBO
+      # =========================
+      - name: Build boot.img
+        run: |
+          export MODEL=r8s
+          export BOARD=exynos9830
+          mkdir -p build/out/$MODEL
+
+          cp out/arch/arm64/boot/Image build/out/$MODEL/
+
+          toolchain/mkdtimg cfg_create \
+            build/out/$MODEL/dtb.img \
+            build/dtconfigs/exynos9830.cfg \
+            -d out/arch/arm64/boot/dts/exynos
+
+          toolchain/mkdtimg cfg_create \
+            build/out/$MODEL/dtbo.img \
+            build/dtconfigs/$MODEL.cfg \
+            -d out/arch/arm64/boot/dts/samsung
+
+          pushd build/ramdisk
+          find . ! -name . | LC_ALL=C sort | \
+            cpio -o -H newc -R root:root | gzip > ../out/$MODEL/ramdisk.cpio.gz
+          popd
+
+          toolchain/mkbootimg \
+            --board $BOARD \
+            --kernel build/out/$MODEL/Image \
+            --ramdisk build/out/$MODEL/ramdisk.cpio.gz \
+            --dtb build/out/$MODEL/dtb.img \
+            --header_version 2 \
+            --pagesize 2048 \
+            -o build/out/$MODEL/boot.img
+
+      # =========================
+      # ARTIFACTS
+      # =========================
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-dtbo-dtb
+          path: |
+            build/out/r8s/boot.img
+            build/out/r8s/dtb.img
+            build/out/r8s/dtbo.img
+            AnyKernel3-Exynos9830.zip
