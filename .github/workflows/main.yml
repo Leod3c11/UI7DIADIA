@@ -12,17 +12,19 @@ jobs:
 
     steps:
       # =========================
-      # CLEAN UP INICIAL (NOVO)
+      # CLEAN UP INICIAL (ATUALIZADO)
       # =========================
-      - name: Clean up LLVM 14 residues
+      - name: Clean up LLVM 14 residues and holds
         run: |
           # Remove pacotes LLVM 14 se instalados
           sudo apt remove --purge -y llvm-14 clang-14 lld-14 || true
           sudo apt autoremove -y
           
+          # Remove holds existentes (para evitar o erro)
+          sudo apt-mark unhold clang-12 lld-12 llvm-12 || true
+          
           # Limpa caches do sistema que possam ter LLVM 14
           sudo rm -rf /usr/lib/llvm-14 /usr/bin/llvm-*14 /usr/bin/clang-14 /usr/bin/lld-14
-          sudo apt-mark hold llvm-12 clang-12 lld-12  # "Hold" para evitar upgrades acidentais
           
           # Limpa diretórios temporários do GitHub Actions
           rm -rf /tmp/* /var/tmp/* || true
@@ -41,42 +43,40 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccache-\( {{ runner.os }}-llvm \){{ env.LLVM_VER }}-${{ github.sha }}  # Adicionado sha para isolamento por commit
+          key: ccache-\( {{ runner.os }}-llvm \){{ env.LLVM_VER }}-${{ github.sha }}
           restore-keys: |
             ccache-\( {{ runner.os }}-llvm \){{ env.LLVM_VER }}-
 
       # ❌ NÃO restauramos out/ aqui propositalmente
-      #    para eliminar QUALQUER lixo LLVM14
 
       # =========================
-      # CLEAN REPOSITORY E SUBMODULES (NOVO)
+      # CLEAN REPOSITORY E SUBMODULES
       # =========================
       - name: Clean repository and submodules
         run: |
-          # Limpa o diretório de build se existir
           rm -rf out/
           
-          # Se houver submodules (ex.: no driver qca6390), atualize e limpe
           git submodule update --init --recursive || true
-          git clean -fdx  # Remove arquivos não rastreados (cuidado: isso apaga .gitignore!)
+          git clean -fdx
           
-          # Limpa especificamente o driver problemático
           rm -rf drivers/net/wireless/qualcomm/qca6390/qcacld-3.0/core/dp/txrx3.0/.tmp_* || true
           rm -rf drivers/net/wireless/qualcomm/qca6390/qcacld-3.0/*.o || true
           
-          # Verifica se há arquivos de LLVM 14 no repo (debug)
           find . -name "*.o" -exec strings {} \; 2>/dev/null | grep -i "llvm14" || echo "Nenhum resíduo LLVM14 encontrado."
 
       # =========================
-      # DEPENDÊNCIAS (MELHORADO)
+      # DEPENDÊNCIAS (ATUALIZADO)
       # =========================
       - name: Install dependencies (Clang 12 ONLY)
         run: |
           sudo apt update -y
-          # Remove qualquer LLVM 14 antes de instalar
-          sudo apt remove --purge -y llvm-14 clang-14 lld-14 llvm-14-tools || true
           
-          sudo apt install -y \
+          # Remove qualquer LLVM 14 e holds antes de instalar
+          sudo apt remove --purge -y llvm-14 clang-14 lld-14 llvm-14-tools || true
+          sudo apt-mark unhold clang-12 lld-12 llvm-12 || true
+          
+          # Instala com flag para permitir mudança em holds (se houver)
+          sudo apt install -y --allow-change-held-packages \
             bc bison build-essential ccache curl flex git \
             libssl-dev libelf-dev libncurses5-dev \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
@@ -96,7 +96,6 @@ jobs:
       # =========================
       - name: Fix LLVM tools binary names and verify
         run: |
-          # Remove links antigos se existirem
           sudo rm -f /usr/bin/llvm-ar /usr/bin/llvm-nm /usr/bin/ld.lld /usr/bin/lld || true
           
           sudo ln -sf /usr/bin/llvm-ar-12       /usr/bin/llvm-ar
@@ -107,7 +106,6 @@ jobs:
           sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/ld.lld
           sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/lld
           
-          # Verifica as versões dos links
           llvm-nm --version | grep "LLVM version 12" || { echo "ERRO: llvm-nm não é versão 12!"; exit 1; }
           ld.lld --version | grep "LLD 12" || { echo "ERRO: ld.lld não é versão 12!"; exit 1; }
 
@@ -131,38 +129,34 @@ jobs:
           echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
           echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
 
-          # Limpa ccache mais agressivamente e versiona pelo LLVM
-          ccache -z  # Zero stats
-          ccache -C  # Clear cache
+          ccache -z
+          ccache -C
           ccache -M 10G
           ccache -s
           
-          # Verificação final
           clang-12 --version
           echo "Usando LLVM 12 confirmado!"
 
       # =========================
-      # DEFCONFIG (MANTIDO)
+      # DEFCONFIG
       # =========================
       - name: Defconfig
         run: |
           make O=out exynos9830_defconfig r8s.config
 
       # =========================
-      # CLEAN E BUILD (MELHORADO)
+      # CLEAN E BUILD
       # =========================
       - name: Build kernel (CLEAN LLVM12)
         run: |
-          # Limpa o out/ completamente para evitar resíduos
           rm -rf out/
-          make O=out exynos9830_defconfig r8s.config  # Isso recria o out/ limpo
+          make O=out exynos9830_defconfig r8s.config
           
-          # Build com verbose para debug (opcional: remova V=1 para menos logs em produção)
-          make O=out -j$(nproc) V=1  # V=1 para verbose, ajuda a identificar erros
+          make O=out -j$(nproc) V=1
           ccache -s
 
       # =========================
-      # ANYKERNEL (MANTIDO)
+      # ANYKERNEL
       # =========================
       - name: Build AnyKernel3
         run: |
@@ -176,7 +170,7 @@ jobs:
           zip -r9 ../AnyKernel3-Exynos9830.zip *
 
       # =========================
-      # BOOT / DTB / DTBO (MANTIDO)
+      # BOOT / DTB / DTBO
       # =========================
       - name: Build boot.img
         run: |
@@ -211,7 +205,7 @@ jobs:
             -o build/out/$MODEL/boot.img
 
       # =========================
-      # ARTIFACTS (MANTIDO)
+      # ARTIFACTS
       # =========================
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
