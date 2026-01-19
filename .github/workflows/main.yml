@@ -1,4 +1,4 @@
-name: Kernel Build Exynos 9830 (LLVM12 SAFE Incremental)
+name: Kernel Build Exynos 9830 (LLVM 12)
 
 on:
   workflow_dispatch:
@@ -11,189 +11,89 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # =========================
-      # CLEAN UP INICIAL
-      # =========================
-      - name: Clean up LLVM 14 residues and holds
-        run: |
-          sudo apt remove --purge -y llvm-14 clang-14 lld-14 || true
-          sudo apt autoremove -y
-          
-          sudo apt-mark unhold clang-12 lld-12 llvm-12 || true
-          
-          sudo rm -rf /usr/lib/llvm-14 /usr/bin/llvm-*14 /usr/bin/clang-14 /usr/bin/lld-14
-          
-          rm -rf /tmp/* /var/tmp/* || true
-          df -h
-
-      # =========================
-      # CHECKOUT
-      # =========================
       - name: Checkout kernel source
         uses: actions/checkout@v4
 
-      # =========================
-      # CACHE
-      # =========================
-      - name: Restore ccache (LLVM versioned)
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: ccache-\( {{ runner.os }}-llvm \){{ env.LLVM_VER }}-${{ github.sha }}
-          restore-keys: |
-            ccache-\( {{ runner.os }}-llvm \){{ env.LLVM_VER }}-
-
-      # =========================
-      # CLEAN REPOSITORY E SUBMODULES
-      # =========================
-      - name: Clean repository and submodules
+      - name: Clean up old LLVM versions
         run: |
-          rm -rf out/
-          
-          git submodule update --init --recursive || true
-          git clean -fdx
-          
-          rm -rf drivers/net/wireless/qualcomm/qca6390/qcacld-3.0/core/dp/txrx3.0/.tmp_* || true
-          rm -rf drivers/net/wireless/qualcomm/qca6390/qcacld-3.0/*.o || true
-          
-          find . -name "*.o" -exec strings {} \; 2>/dev/null | grep -i "llvm14" || echo "Nenhum resíduo LLVM14 encontrado."
+          sudo apt remove --purge -y llvm-14 clang-14 lld-14 || true
+          sudo apt autoremove -y
+          sudo rm -rf /usr/lib/llvm-14 /usr/bin/llvm-*14 /usr/bin/clang-14 /usr/bin/lld-14
 
-      # =========================
-      # DEPENDÊNCIAS
-      # =========================
-      - name: Install dependencies (Clang 12 ONLY)
+      - name: Install dependencies
         run: |
           sudo apt update -y
-          
-          sudo apt remove --purge -y llvm-14 clang-14 lld-14 llvm-14-tools || true
-          sudo apt-mark unhold clang-12 lld-12 llvm-12 || true
-          
           sudo apt install -y --allow-change-held-packages \
             bc bison build-essential ccache curl flex git \
             libssl-dev libelf-dev libncurses5-dev \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
             clang-12 lld-12 llvm-12 llvm-12-tools \
-            zip wget neofetch
-          
-          if command -v clang-14 &> /dev/null; then
-            echo "ERRO: LLVM 14 ainda presente! Abortando."
-            exit 1
-          fi
-          clang-12 --version | grep "clang version 12"
-          llvm-nm-12 --version | grep "LLVM version 12"
+            zip wget
 
-      # =========================
-      # FIX LLVM BINÁRIOS (ATUALIZADO COM SYMLINK PARA CLANG)
-      # =========================
-      - name: Fix LLVM tools binary names and verify
+      - name: Create LLVM symlinks
         run: |
-          # Remove links antigos
-          sudo rm -f /usr/bin/llvm-ar /usr/bin/llvm-nm /usr/bin/ld.lld /usr/bin/lld \
-                     /usr/bin/clang /usr/bin/clang++ /usr/bin/llvm-objcopy \
-                     /usr/bin/llvm-objdump /usr/bin/llvm-strip || true
-          
-          # Cria symlinks para as ferramentas LLVM 12
-          sudo ln -sf /usr/bin/llvm-ar-12       /usr/bin/llvm-ar
-          sudo ln -sf /usr/bin/llvm-nm-12       /usr/bin/llvm-nm
-          sudo ln -sf /usr/bin/llvm-objcopy-12  /usr/bin/llvm-objcopy
-          sudo ln -sf /usr/bin/llvm-objdump-12  /usr/bin/llvm-objdump
-          sudo ln -sf /usr/bin/llvm-strip-12    /usr/bin/llvm-strip
-          sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/ld.lld
-          sudo ln -sf /usr/bin/ld.lld-12        /usr/bin/lld
-          
-          # Symlinks essenciais para o kernel build (CLANG!)
-          sudo ln -sf /usr/bin/clang-12         /usr/bin/clang
-          sudo ln -sf /usr/bin/clang++-12       /usr/bin/clang++
-          
-          # Verifica as versões
-          clang --version | grep "clang version 12" || { echo "ERRO: clang não é versão 12!"; exit 1; }
-          llvm-nm --version | grep "LLVM version 12" || { echo "ERRO: llvm-nm não é versão 12!"; exit 1; }
-          ld.lld --version | grep "LLD 12" || { echo "ERRO: ld.lld não é versão 12!"; exit 1; }
+          sudo ln -sf /usr/bin/clang-12    /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-12  /usr/bin/clang++
+          sudo ln -sf /usr/bin/llvm-ar-12  /usr/bin/llvm-ar
+          sudo ln -sf /usr/bin/llvm-nm-12  /usr/bin/llvm-nm
+          sudo ln -sf /usr/bin/llvm-objcopy-12 /usr/bin/llvm-objcopy
+          sudo ln -sf /usr/bin/llvm-objdump-12 /usr/bin/llvm-objdump
+          sudo ln -sf /usr/bin/llvm-strip-12 /usr/bin/llvm-strip
+          sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/ld.lld
+          sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/lld
 
-      # =========================
-      # ENV
-      # =========================
+          # Verificação rápida
+          clang --version | grep "clang version 12" || { echo "Erro: clang versão errada"; exit 1; }
+          ld.lld --version | grep "LLD 12" || { echo "Erro: ld.lld versão errada"; exit 1; }
+
       - name: Setup environment
         run: |
           echo "ARCH=arm64" >> $GITHUB_ENV
           echo "SUBARCH=arm64" >> $GITHUB_ENV
           echo "LLVM=1" >> $GITHUB_ENV
-
-          echo "CC=ccache clang" >> $GITHUB_ENV          # Agora usa clang (symlink para clang-12)
-          echo "LD=ld.lld" >> $GITHUB_ENV                 # usa ld.lld (symlink para ld.lld-12)
+          echo "CC=ccache clang" >> $GITHUB_ENV
+          echo "LD=ld.lld" >> $GITHUB_ENV
           echo "AR=llvm-ar" >> $GITHUB_ENV
           echo "NM=llvm-nm" >> $GITHUB_ENV
           echo "OBJCOPY=llvm-objcopy" >> $GITHUB_ENV
           echo "OBJDUMP=llvm-objdump" >> $GITHUB_ENV
           echo "STRIP=llvm-strip" >> $GITHUB_ENV
-
           echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
           echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
 
-          ccache -z
           ccache -C
           ccache -M 10G
           ccache -s
-          
-          clang --version
-          echo "Usando LLVM 12 confirmado!"
 
-      # =========================
-      # DEFCONFIG
-      # =========================
+      - name: Clean build directory
+        run: rm -rf out/
+
       - name: Defconfig
-        run: |
-          make O=out exynos9830_defconfig r8s.config
+        run: make O=out exynos9830_defconfig r8s.config
 
-      # =========================
-      # CLEAN E BUILD
-      # =========================
-      - name: Build kernel (CLEAN LLVM12)
-        run: |
-          rm -rf out/
-          make O=out exynos9830_defconfig r8s.config
-          
-          make O=out -j$(nproc) V=1
-          ccache -s
+      - name: Build kernel
+        run: make O=out -j$(nproc)
 
-      # =========================
-      # ANYKERNEL
-      # =========================
       - name: Build AnyKernel3
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
           rm -rf anykernel/.git anykernel/README.md
-
-          cp out/arch/arm64/boot/Image.gz anykernel/ || \
-          cp out/arch/arm64/boot/Image anykernel/
-
+          cp out/arch/arm64/boot/Image.gz anykernel/ || cp out/arch/arm64/boot/Image anykernel/
           cd anykernel
           zip -r9 ../AnyKernel3-Exynos9830.zip *
 
-      # =========================
-      # BOOT / DTB / DTBO
-      # =========================
       - name: Build boot.img
         run: |
           export MODEL=r8s
           export BOARD=exynos9830
           mkdir -p build/out/$MODEL
-
           cp out/arch/arm64/boot/Image build/out/$MODEL/
 
-          toolchain/mkdtimg cfg_create \
-            build/out/$MODEL/dtb.img \
-            build/dtconfigs/exynos9830.cfg \
-            -d out/arch/arm64/boot/dts/exynos
-
-          toolchain/mkdtimg cfg_create \
-            build/out/$MODEL/dtbo.img \
-            build/dtconfigs/$MODEL.cfg \
-            -d out/arch/arm64/boot/dts/samsung
+          toolchain/mkdtimg cfg_create build/out/$MODEL/dtb.img build/dtconfigs/exynos9830.cfg -d out/arch/arm64/boot/dts/exynos
+          toolchain/mkdtimg cfg_create build/out/$MODEL/dtbo.img build/dtconfigs/$MODEL.cfg -d out/arch/arm64/boot/dts/samsung
 
           pushd build/ramdisk
-          find . ! -name . | LC_ALL=C sort | \
-            cpio -o -H newc -R root:root | gzip > ../out/$MODEL/ramdisk.cpio.gz
+          find . ! -name . | LC_ALL=C sort | cpio -o -H newc -R root:root | gzip > ../out/$MODEL/ramdisk.cpio.gz
           popd
 
           toolchain/mkbootimg \
@@ -205,13 +105,10 @@ jobs:
             --pagesize 2048 \
             -o build/out/$MODEL/boot.img
 
-      # =========================
-      # ARTIFACTS
-      # =========================
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: boot-dtbo-dtb
+          name: kernel-artifacts
           path: |
             build/out/r8s/boot.img
             build/out/r8s/dtb.img
