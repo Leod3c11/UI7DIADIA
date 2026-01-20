@@ -1,4 +1,4 @@
-name: Kernel Build Exynos 9830 (LLVM 12)
+name: Kernel Build Exynos 9830 (LLVM 12 + Simple LMK)
 
 on:
   workflow_dispatch:
@@ -13,6 +13,13 @@ jobs:
     steps:
       - name: Checkout kernel source
         uses: actions/checkout@v4
+
+      - name: Add simple_lmk submodule
+        run: |
+          rm -rf drivers/android/simple_lmk
+          git submodule add -b linux-4.19 https://github.com/kerneltoast/simple_lmk.git drivers/android/simple_lmk || true
+          git submodule update --init --recursive
+          ls drivers/android/simple_lmk/drivers/android/simple_lmk.c || echo "Submodule added!"
 
       - name: Clean up old LLVM versions
         run: |
@@ -42,7 +49,6 @@ jobs:
           sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/ld.lld
           sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/lld
 
-          # Verificação rápida
           clang --version | grep "clang version 12" || { echo "Erro: clang versão errada"; exit 1; }
           ld.lld --version | grep "LLD 12" || { echo "Erro: ld.lld versão errada"; exit 1; }
 
@@ -70,6 +76,15 @@ jobs:
 
       - name: Defconfig
         run: make O=out exynos9830_defconfig r8s.config
+
+      - name: Enable CONFIG_ANDROID_SIMPLE_LMK
+        run: |
+          # Adiciona ou atualiza o config no .config
+          sed -i '/CONFIG_ANDROID_SIMPLE_LMK/d' out/.config || true
+          echo "CONFIG_ANDROID_SIMPLE_LMK=y" >> out/.config
+          
+          # Atualiza o config (resolve dependências)
+          make O=out olddefconfig
 
       - name: Build kernel
         run: make O=out -j$(nproc)
