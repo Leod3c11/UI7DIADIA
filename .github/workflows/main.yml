@@ -1,10 +1,10 @@
-name: Kernel Build Exynos 9830 (LLVM 12 + Simple LMK)
+name: Kernel Build Exynos 9830 (LLVM 14)
 
 on:
   workflow_dispatch:
 
 env:
-  LLVM_VER: "12"
+  LLVM_VER: "14"
 
 jobs:
   build:
@@ -14,19 +14,6 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
 
-      - name: Add simple_lmk submodule
-        run: |
-          rm -rf drivers/android/simple_lmk
-          git submodule add -b linux-4.19 https://github.com/kerneltoast/simple_lmk.git drivers/android/simple_lmk || true
-          git submodule update --init --recursive
-          ls drivers/android/simple_lmk/drivers/android/simple_lmk.c || echo "Submodule added!"
-
-      - name: Clean up old LLVM versions
-        run: |
-          sudo apt remove --purge -y llvm-14 clang-14 lld-14 || true
-          sudo apt autoremove -y
-          sudo rm -rf /usr/lib/llvm-14 /usr/bin/llvm-*14 /usr/bin/clang-14 /usr/bin/lld-14
-
       - name: Install dependencies
         run: |
           sudo apt update -y
@@ -34,23 +21,24 @@ jobs:
             bc bison build-essential ccache curl flex git \
             libssl-dev libelf-dev libncurses5-dev \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            clang-12 lld-12 llvm-12 llvm-12-tools \
+            clang-14 lld-14 llvm-14 llvm-14-tools \
             zip wget
 
       - name: Create LLVM symlinks
         run: |
-          sudo ln -sf /usr/bin/clang-12    /usr/bin/clang
-          sudo ln -sf /usr/bin/clang++-12  /usr/bin/clang++
-          sudo ln -sf /usr/bin/llvm-ar-12  /usr/bin/llvm-ar
-          sudo ln -sf /usr/bin/llvm-nm-12  /usr/bin/llvm-nm
-          sudo ln -sf /usr/bin/llvm-objcopy-12 /usr/bin/llvm-objcopy
-          sudo ln -sf /usr/bin/llvm-objdump-12 /usr/bin/llvm-objdump
-          sudo ln -sf /usr/bin/llvm-strip-12 /usr/bin/llvm-strip
-          sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/ld.lld
-          sudo ln -sf /usr/bin/ld.lld-12   /usr/bin/lld
+          sudo ln -sf /usr/bin/clang-14    /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-14  /usr/bin/clang++
+          sudo ln -sf /usr/bin/llvm-ar-14  /usr/bin/llvm-ar
+          sudo ln -sf /usr/bin/llvm-nm-14  /usr/bin/llvm-nm
+          sudo ln -sf /usr/bin/llvm-objcopy-14 /usr/bin/llvm-objcopy
+          sudo ln -sf /usr/bin/llvm-objdump-14 /usr/bin/llvm-objdump
+          sudo ln -sf /usr/bin/llvm-strip-14 /usr/bin/llvm-strip
+          sudo ln -sf /usr/bin/ld.lld-14   /usr/bin/ld.lld
+          sudo ln -sf /usr/bin/ld.lld-14   /usr/bin/lld
 
-          clang --version | grep "clang version 12" || { echo "Erro: clang versão errada"; exit 1; }
-          ld.lld --version | grep "LLD 12" || { echo "Erro: ld.lld versão errada"; exit 1; }
+          # Verificação rápida
+          clang --version | grep "clang version 14" || { echo "Erro: clang versão errada"; exit 1; }
+          ld.lld --version | grep "LLD 14" || { echo "Erro: ld.lld versão errada"; exit 1; }
 
       - name: Setup environment
         run: |
@@ -76,15 +64,6 @@ jobs:
 
       - name: Defconfig
         run: make O=out exynos9830_defconfig r8s.config
-
-      - name: Enable CONFIG_ANDROID_SIMPLE_LMK
-        run: |
-          # Adiciona ou atualiza o config no .config
-          sed -i '/CONFIG_ANDROID_SIMPLE_LMK/d' out/.config || true
-          echo "CONFIG_ANDROID_SIMPLE_LMK=y" >> out/.config
-          
-          # Atualiza o config (resolve dependências)
-          make O=out olddefconfig
 
       - name: Build kernel
         run: make O=out -j$(nproc)
