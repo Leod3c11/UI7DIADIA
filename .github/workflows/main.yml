@@ -1,10 +1,7 @@
-name: Kernel Build Exynos 9830 (LLVM 14)
+name: Kernel Build Exynos 9830 (Clang r450784d Android 13 + ThinLTO)
 
 on:
   workflow_dispatch:
-
-env:
-  LLVM_VER: "14"
 
 jobs:
   build:
@@ -21,42 +18,41 @@ jobs:
             bc bison build-essential ccache curl flex git \
             libssl-dev libelf-dev libncurses5-dev \
             gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
-            clang-14 lld-14 llvm-14 llvm-14-tools \
-            zip wget
+            zip wget tar xz-utils
 
-      - name: Create LLVM symlinks
+      - name: Download and setup Clang r450784d (Android 13)
         run: |
-          sudo ln -sf /usr/bin/clang-14    /usr/bin/clang
-          sudo ln -sf /usr/bin/clang++-14  /usr/bin/clang++
-          sudo ln -sf /usr/bin/llvm-ar-14  /usr/bin/llvm-ar
-          sudo ln -sf /usr/bin/llvm-nm-14  /usr/bin/llvm-nm
-          sudo ln -sf /usr/bin/llvm-objcopy-14 /usr/bin/llvm-objcopy
-          sudo ln -sf /usr/bin/llvm-objdump-14 /usr/bin/llvm-objdump
-          sudo ln -sf /usr/bin/llvm-strip-14 /usr/bin/llvm-strip
-          sudo ln -sf /usr/bin/ld.lld-14   /usr/bin/ld.lld
-          sudo ln -sf /usr/bin/ld.lld-14   /usr/bin/lld
+          mkdir -p toolchain/clang_r450784d
+          cd toolchain/clang_r450784d
+          curl -L -o clang.tar.gz https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-13.0.0_r13/clang-r450784d.tar.gz
+          tar xf clang.tar.gz
+          rm clang.tar.gz
+          echo "Clang version:"
+          ./bin/clang --version
 
-          # Verificação rápida
-          clang --version | grep "clang version 14" || { echo "Erro: clang versão errada"; exit 1; }
-          ld.lld --version | grep "LLD 14" || { echo "Erro: ld.lld versão errada"; exit 1; }
-
-      - name: Setup environment
+      - name: Setup environment (ThinLTO + otimizações)
         run: |
           echo "ARCH=arm64" >> $GITHUB_ENV
           echo "SUBARCH=arm64" >> $GITHUB_ENV
           echo "LLVM=1" >> $GITHUB_ENV
-          echo "CC=ccache clang" >> $GITHUB_ENV
-          echo "LD=ld.lld" >> $GITHUB_ENV
-          echo "AR=llvm-ar" >> $GITHUB_ENV
-          echo "NM=llvm-nm" >> $GITHUB_ENV
-          echo "OBJCOPY=llvm-objcopy" >> $GITHUB_ENV
-          echo "OBJDUMP=llvm-objdump" >> $GITHUB_ENV
-          echo "STRIP=llvm-strip" >> $GITHUB_ENV
+          echo "LLVM_IAS=1" >> $GITHUB_ENV
+          echo "CC=ccache $GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/clang" >> $GITHUB_ENV
+          echo "CXX=ccache $GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/clang++" >> $GITHUB_ENV
+          echo "LD=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/ld.lld" >> $GITHUB_ENV
+          echo "AR=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/llvm-ar" >> $GITHUB_ENV
+          echo "NM=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/llvm-nm" >> $GITHUB_ENV
+          echo "OBJCOPY=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/llvm-objcopy" >> $GITHUB_ENV
+          echo "OBJDUMP=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/llvm-objdump" >> $GITHUB_ENV
+          echo "STRIP=$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin/llvm-strip" >> $GITHUB_ENV
           echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
           echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
 
+          # ThinLTO + otimizações agressivas
+          echo "KBUILD_CFLAGS=-flto=thin -fwhole-program-vtables -O3 -march=armv8.2-a+crc -mtune=cortex-a77" >> $GITHUB_ENV
+          echo "KBUILD_LDFLAGS=-flto=thin" >> $GITHUB_ENV
+
           ccache -C
-          ccache -M 10G
+          ccache -M 12G
           ccache -s
 
       - name: Clean build directory
