@@ -28,20 +28,10 @@ jobs:
           tar xf clang.tar.gz
           rm clang.tar.gz
 
-          # Criar symlinks para todos os binários necessários (corrige ld.lld e llvm-objdump não encontrados)
-          ln -sf clang bin/clang
-          ln -sf clang++ bin/clang++
-          ln -sf llvm-ar bin/llvm-ar
-          ln -sf llvm-nm bin/llvm-nm
-          ln -sf llvm-objcopy bin/llvm-objcopy
-          ln -sf llvm-objdump bin/llvm-objdump
-          ln -sf llvm-strip bin/llvm-strip
-          ln -sf ld.lld bin/ld.lld  # Muito importante para VDSO e linking
-
-          # Adicionar ao PATH global para que make encontre tudo
+          # Adicionar o diretório ao PATH (sem symlinks extras!)
           echo "$GITHUB_WORKSPACE/toolchain/clang_r450784d/bin" >> $GITHUB_PATH
 
-          # Verificação
+          # Verificação (usa nomes reais do tarball)
           clang --version
           ld.lld --version || echo "ld.lld não encontrado!"
           llvm-objdump --version || echo "llvm-objdump não encontrado!"
@@ -63,7 +53,7 @@ jobs:
           echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
           echo "CROSS_COMPILE_ARM32=arm-linux-gnueabi-" >> $GITHUB_ENV
 
-          # ThinLTO + otimizações agressivas para Exynos 9830
+          # ThinLTO + otimizações agressivas
           echo "KBUILD_CFLAGS=-flto=thin -fwhole-program-vtables -O3 -march=armv8.2-a+crc -mtune=cortex-a77" >> $GITHUB_ENV
           echo "KBUILD_LDFLAGS=-flto=thin" >> $GITHUB_ENV
 
