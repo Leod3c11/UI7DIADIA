@@ -457,16 +457,16 @@
 		#define PM_QOS_MIN_WO_BOOST_LIMIT	1
 		#define PM_QOS_MAX_LIMIT		2
 		/* Execution Mode */
-		#define AARCH64_MODE			0
-		#define AARCH32_MODE			1
+		#define AARCH64_MODE			1
+		#define AARCH32_MODE			0
 		/* Auto Fill Flag for Little Freq */
-		#define AUTO_FILL			1
-		#define NOT_FILL			0
+		#define AUTO_FILL			0
+		#define NOT_FILL			1
 
 		device_type = "cpufreq_ufc";
 		table-col = <5>;
 		table-row = <42>;
-		fill-flag = <AUTO_FILL>;
+		fill-flag = <NOT_FILL>;
 
 		domain@0 {
 			device_type = "ufc_domain";
@@ -495,7 +495,7 @@
 			sse-mode = <AARCH64_MODE>;
 			      /* Vfreq  big(1)  Med(2)  Lit(3)  Mode*/
 			table = <
-				2730000	2730000	2600000	2002000 0
+				2730000	2730000	2600000	2106000 0
 				2623359	2626000	2600000	2002000 0
 				2519384	2522000	2600000	2002000 0
 				2415410	2418000	2600000	2002000 0
@@ -546,7 +546,7 @@
 			sse-mode = <AARCH32_MODE>;
 			      /* Vfreq    big      Lit  Mode */
 			table = <
-				2730000	2730000	2600000	2002000 0
+				2730000	2730000	2600000	2106000 0
 				2623359	2626000	2600000	2002000 0
 				2519384	2522000	2600000	2002000 0
 				2415410	2418000	2600000	2002000 0
@@ -597,7 +597,7 @@
 			sse-mode = <AARCH64_MODE>;
 			      /* Vfreq    big      Lit    Mode*/
 			table = <
-				2730000	2730000	2600000	2002000 3
+				2730000	2730000	2600000	2106000 3
 				2623359	2626000	2600000	2002000 3
 				2519384	2522000	2600000	2002000 3
 				2415410	2418000	2600000	2002000 3
@@ -647,7 +647,7 @@
 			ctrl-type = <PM_QOS_MIN_LIMIT>;
 			sse-mode = <AARCH32_MODE>;
 			table = <
-				2730000	2730000	2600000	2002000 3
+				2730000	2730000	2600000	2106000 3
 				2623359	2626000	2600000	2002000 3
 				2519384	2626000	2600000	2002000 3
 				2415410	2522000	2600000	2002000 3
@@ -749,8 +749,8 @@
 			cal-id = <ACPM_DVFS_CPUCL0>;
 			dm-type = <DM_CPU_CL0>;
 
-			max-freq = <2002000>;
-			min-freq = <442000>;
+			max-freq = <2106000>;
+			min-freq = <182000>;
 
 			/* PM QoS Class ID*/
 			pm_qos-min-class = <3>;
@@ -801,7 +801,7 @@
 			dm-type = <DM_CPU_CL1>;
 
 			max-freq = <2600000>;
-			min-freq = <507000>;
+			min-freq = <377000>;
 
 			/* PM QoS Class ID*/
 			pm_qos-min-class = <5>;
@@ -863,7 +863,7 @@
 			dm-type = <DM_CPU_CL2>;
 			need-awake;
 
-			max-freq = <2730000>;
+			max-freq = <3016000>;
 			min-freq = <546000>;
 
 			/* PM QoS Class ID*/
@@ -930,7 +930,7 @@
 		compatible = "samsung,exynos-hiu";
 		interrupts = <GIC_SPI INTREQ__CPUCL2_GCUIRQ IRQ_TYPE_LEVEL_HIGH>;
 		boost-threshold = <2002000>;
-		boost-max = <2730000>;
+		boost-max = <3016000>;
 		cal-id = <ACPM_DVFS_CPUCL2>;
 		sw-pbl = <0xff>;
 		bl1-inc = <0>;
