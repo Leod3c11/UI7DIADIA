@@ -37,6 +37,8 @@
 #include "exynos-acme.h"
 #include "exynos-ufc.h"
 
+static int pre_scale(void);
+
 /*
  * list head of cpufreq domain
  */
