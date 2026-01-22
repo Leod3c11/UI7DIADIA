@@ -478,14 +478,14 @@
 		domain@1 {
 			device_type = "ufc_domain";
 			shared-cpus = "4-5";
-			table-idx = <1>;	/* index to ref ufc-table */
+			table-idx = <2>;	/* index to ref ufc-table */
 			pm_qos-min-class = <5>;
 			pm_qos-max-class = <6>;
 		};
 		domain@2 {
 			device_type = "ufc_domain";
 			shared-cpus = "6-7";
-			table-idx = <1>;	/* index to ref ufc-table */
+			table-idx = <2>;	/* index to ref ufc-table */
 			pm_qos-min-class = <7>;
 			pm_qos-max-class = <8>;
 		};
