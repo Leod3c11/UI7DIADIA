@@ -229,38 +229,14 @@ static unsigned int apply_pm_qos(struct exynos_cpufreq_domain *domain,
 					struct cpufreq_policy *policy,
 					unsigned int target_freq)
 {
-	unsigned int freq;
-	int qos_min, qos_max;
+	/* HARD HACK: ignora PM QoS e policy */
+	if (target_freq > domain->max_freq)
+		target_freq = domain->max_freq;
 
-	/*
-	 * In case of static governor, it should garantee to scale to
-	 * target, it does not apply PM QoS.
-	 */
-	if (static_governor(policy))
-		return target_freq;
+	if (target_freq < domain->min_freq)
+		target_freq = domain->min_freq;
 
-	qos_min = pm_qos_request(domain->pm_qos_min_class);
-	qos_max = pm_qos_request(domain->pm_qos_max_class);
-
-	if (qos_min < 0 || qos_max < 0)
-		return target_freq;
-
-	if (qos_min > policy->cpuinfo.max_freq) {
-		qos_min = policy->cpuinfo.max_freq;
-	}
-	if (qos_max < policy->cpuinfo.min_freq) {
-		qos_max = policy->cpuinfo.min_freq;
-	}
-
-	freq = max((unsigned int)qos_min, target_freq);
-	freq = min((unsigned int)qos_max, freq);
-
-	return freq;
-}
-
-static int pre_scale(void)
-{
-	return 0;
+	return target_freq;
 }
 
 static int post_scale(void)
@@ -376,7 +352,11 @@ static int exynos_cpufreq_verify(struct cpufreq_policy *policy)
 	if (!domain)
 		return -EINVAL;
 
-	return cpufreq_frequency_table_verify(policy, domain->freq_table);
+	/* HARD HACK: ignora limites do userspace */
+	policy->min = domain->min_freq;
+	policy->max = domain->max_freq;
+
+	return 0;
 }
 
 static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
@@ -407,6 +387,11 @@ static int __exynos_cpufreq_target(struct cpufreq_policy *policy,
 	}
 
 	resolve_freq = exynos_cpufreq_resolve(policy, target_freq);
+	/* HARD CLAMP FINAL */
+    if (target_freq > domain->max_freq)
+	target_freq = domain->max_freq;
+    else if (target_freq < domain->min_freq)
+	target_freq = domain->min_freq;
 	if (target_freq != resolve_freq)
 		pr_debug("%s:%d target_freq(%u) is differ with resolve_freq(%u)\n",
 				__func__, __LINE__, target_freq, resolve_freq);
